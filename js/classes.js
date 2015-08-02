@@ -15,8 +15,10 @@ function $videoUI(id)
 	this.Element = document.createElement("div");
 	this.Element.className = "class-video-ui";
 
+	//	Video Player
 	var video = new $videoplayer();
 
+	//	Results list
 	var results = new $listpagination("Videos");
 	results.style = "width:400px;margin:10px;";
 	results.itemselected = function(d)
@@ -33,6 +35,7 @@ function $videoUI(id)
 
 	var search_text = new $inputtext(); 
 	search_text.style = "width:80%";
+	search_text.enterkeypressed = function(){setSearch();};
 	node.appendChild(search_text.Element);
 
 	var search_button = new $inputbutton("Search");
@@ -105,7 +108,7 @@ function $videoUI(id)
 	tools.appendChild(sort.label);
 	tools.appendChild(sort.Element);
 
-	//	Video Player and results
+	//	Build UI
 	var table = document.createElement("div");
 	table.className = "class-table";
 
@@ -127,14 +130,14 @@ function $videoUI(id)
 	right_cell.appendChild(results.Element);
 	this.Element.appendChild(table);
 
-	//	Add video UI to the parent node  
+	//	Add UI to the parent node  
 	var parent = document.getElementById(id);
 	parent.appendChild(this.Element);
 
 	//	set focus on search text
 	search_text.focus();
 
-	//	Load favorites videos from storage list
+	//	Load favorites videos from session storage
 	video.loadFavorites();
 
 	//	Private Methods
@@ -153,7 +156,6 @@ function $videoUI(id)
 
 	function search()
 	{
-
 		var text  = search_text.getText();
 		var request = null;
 		if(location_radius == "")
@@ -188,7 +190,6 @@ function $videoUI(id)
 				return;
 			}	
 			
-			
 			next_page_token = response.result.nextPageToken;
 
 			for(var i=0;  i < response.items.length ;i++) results.addItem(new $videoitem(response.items[i], false));
@@ -222,7 +223,7 @@ function $videoUI(id)
 		};
 		favorites.postreset = function(){
 			//	clean up session storage
-			sessionStorage.removeItem("favoritelist");
+			localStorage.removeItem("favoritelist");
 		};
 
 		var video  = document.createElement("iframe");
@@ -424,7 +425,7 @@ function $videoUI(id)
 
 		function loadFavorites()
 		{
-			var list = sessionStorage.getItem("favoritelist");
+			var list = localStorage.getItem("favoritelist");
 
 			if(list != null) 
 			{	
@@ -445,7 +446,7 @@ function $videoUI(id)
 				if(search.index == -1) 
 				{
 					search.list.push(data); 
-					sessionStorage.setItem("favoritelist", JSON.stringify(search.list));
+					localStorage.setItem("favoritelist", JSON.stringify(search.list));
 					//	Add to list
 					addFavoriteItem(data);
 				}
@@ -459,13 +460,13 @@ function $videoUI(id)
 			if(search.index > -1) 
 			{
 				search.list.splice(search.index, 1);
-				sessionStorage.setItem("favoritelist", JSON.stringify(search.list));
+				loaclStorage.setItem("favoritelist", JSON.stringify(search.list));
 			}	
 		}
 
 		function searchFavorite(id)
 		{
-			var list = sessionStorage.getItem("favoritelist");
+			var list = localStorage.getItem("favoritelist");
 
 			if(list == null) 
 			{
@@ -490,7 +491,6 @@ function $videoUI(id)
 			favorites.addItem(item);
 		}
 	}
-
 
 	function $videoitem(data, close)
 	{
@@ -556,7 +556,6 @@ function $videoUI(id)
 
 		this.Element.appendChild(cell);
 	}
-
 }
 
 
@@ -591,7 +590,6 @@ function $dropdown(list, label)
 
 	//	Events
 	this.selectionchanged = function(s){};
-
 }
 
 function $foldinglist(text, clear)
@@ -765,11 +763,20 @@ function $listpagination(title)
 
 function $inputtext()
 {
+	var This = this;
 	$object.call(this);
 	this.Element = document.createElement("input");
 	this.Element.type = "text";
 	this.Element.className = "class-input-text";
 
+	this.Element.onkeypress = function(e){
+		var k = e.keyCode?e.keyCode:e.which;
+		if(k==13) This.enterkeypressed();
+	};
+	
+	//	Events
+	this.enterkeypressed = function(){};
+	
 	// Methods
 	this.getText = function(){ return this.Element.value;};
 }
