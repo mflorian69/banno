@@ -1,19 +1,28 @@
 
 /*	Global Variables	*/
+
+/* had to add this to get the comments because the OAUTH2 key doesn't work*/
+var YOUTUBE_API_KEY = "AIzaSyDatlo3qK8YNcVcP9AeHwsEdrHBaZsxMyk"; 
+
+/* This variable is used to create unique ID and for labeling purpose */
 var DROPDOWN_ID = 0;
-var YOUTUBE_USER_URL = "https://www.youtube.com/user/";
 
 /*	Public Classes	*/
 function $videoUI(id)
 {
+	var parent = document.getElementById(id);
+	if(parent ==null)
+	{
+		alert("Invalid container ID");
+		return;
+	}	
+
+	$object.call(this, "div", "class-video-ui");
 	var sort_expression = "date";
 	var next_page_token = "";
 	var location_latitude = "";
 	var location_longitude = "";
 	var location_radius = "";
-
-	this.Element = document.createElement("div");
-	this.Element.className = "class-video-ui";
 
 	//	Video Player
 	var video = new $videoplayer();
@@ -30,25 +39,26 @@ function $videoUI(id)
 	};
 
 	//	Search 
-	node = document.createElement("div");
-	_setStyle(node, "padding:10px;");
+	var node = new $objectpanel();
+	node.style = "padding:10px;";
 
 	var search_text = new $inputtext(); 
+	search_text.Element.placeholder = "video keyword";
 	search_text.style = "width:80%";
 	search_text.enterkeypressed = function(){setSearch();};
-	node.appendChild(search_text.Element);
+	node.appendChild(search_text);
 
 	var search_button = new $inputbutton("Search");
 	search_button.style = "width:100px;height:30px;margin-left:5px;";
 	search_button.clicked = function(){
 		setSearch();
 	};
-	node.appendChild(search_button.Element);
-	this.Element.appendChild(node);
+	node.appendChild(search_button);
+	this.appendChild(node);
 
 	//	Sort and Filter
-	var tools = document.createElement("div");
-	_setStyle(tools,"text-align:left;margin-top:5px;padding-left: 10px;");
+	var tools = new $objectpanel();
+	tools.style = "text-align:left;margin-top:5px;padding-left: 10px;";
 
 	var filter = new $dropdown(["None","By Location (10 miles)", "By Location (50 miles)", "By Location (100 miles)"], "Filter");
 	filter.style = "margin-right:5px;width:150px";
@@ -85,7 +95,7 @@ function $videoUI(id)
 		}	
 	};
 	tools.appendChild(filter.label);
-	tools.appendChild(filter.Element);
+	tools.appendChild(filter);
 
 	var sort = new $dropdown(["Sort by Date", "Sort by Rating", "Sort by Relevance"], "Sort");
 	sort.selectionchanged = function(s){
@@ -106,32 +116,17 @@ function $videoUI(id)
 
 	};
 	tools.appendChild(sort.label);
-	tools.appendChild(sort.Element);
+	tools.appendChild(sort);
 
 	//	Build UI
-	var table = document.createElement("div");
-	table.className = "class-table";
-
-	var row = document.createElement("div");
-	row.className = "class-row";
-
-	var left_cell = document.createElement("div");
-	left_cell.className = "class-cell";
-
-	var right_cell = document.createElement("div");
-	right_cell.className = "class-cell";
-
-	row.appendChild(left_cell);
-	row.appendChild(right_cell);
-	table.appendChild(row);
-
-	left_cell.appendChild(video.Element);
-	right_cell.appendChild(tools);
-	right_cell.appendChild(results.Element);
-	this.Element.appendChild(table);
+	var table = new $objecttable();
+	table.appendRow(2);
+	table.addItem(0,0, video);
+	table.addItem(0,1, tools);
+	table.addItem(0,1, results);
+	this.appendChild(table);
 
 	//	Add UI to the parent node  
-	var parent = document.getElementById(id);
 	parent.appendChild(this.Element);
 
 	//	set focus on search text
@@ -182,22 +177,36 @@ function $videoUI(id)
 			});
 		}	
 
+
 		request.execute(function(response) {
 
-			if(response.result == undefined)
+			if(response.items == undefined)
 			{
 				alert("An Error occurred while requesting the video list, try it later");
 				return;
 			}	
-			
-			next_page_token = response.result.nextPageToken;
 
+			next_page_token = response.nextPageToken;
 			for(var i=0;  i < response.items.length ;i++) results.addItem(new $videoitem(response.items[i], false));
 
-			if(response.items.length > 0)
+			/* FIXME: There is a Youtube API BUG: 
+			 * 	For example when executing a search the response returns: 
+			 *  
+			 *  response.pageInfo.totalResults = 24  
+			 *  response.items.length = 0
+			 *  
+			 *  The response.items arrays is empty even when totalResults is greater than zero,
+			 *  also nextPageToken returns the next page info.
+			 */
+			
+			if(next_page_token != "" && response.items.length > 0)
 			{
 				results.pagination(true);
 			}
+			else
+			{
+				results.pagination(false);
+			}	
 		});
 	}
 
@@ -206,9 +215,8 @@ function $videoUI(id)
 	{
 		var data = null;
 		var This = this;
-		var comment_index = 0;
-		var comments_page = 10;
 		var comments_list = null;
+		var commnets_next_token = "";
 
 		this.Element = document.createElement("div");
 		this.Element.className = "class-video-player-box";
@@ -252,10 +260,10 @@ function $videoUI(id)
 		meta.appendChild(detail);
 		meta.appendChild(rating);
 
-		var comments = new $listpagination("Comments(0)");
+		var comments = new $listpagination("Comments");
 		comments.style = "width:560px;margin-top:10px;margin-left:5px;";
 		comments.showmore = function(){
-			nextComments();
+			getComments();
 		};
 
 		this.Element.appendChild(favorites.Element);
@@ -273,7 +281,6 @@ function $videoUI(id)
 			favorites.collapse();
 			_removeChildren(rating);
 			comments.reset();
-			comments.setTitle("Comments(0)");
 			data = d;
 			meta.style.display = "block";
 			title.innerHTML =  data.snippet.title;
@@ -285,12 +292,13 @@ function $videoUI(id)
 			comment_index = 0;
 			comments_list = [];
 			comments.pagination(false);
+			commnets_next_token = "";
 			getVideoInfo();
 		};
 
 		function getVideoInfo()
 		{
-			
+
 			request = gapi.client.youtube.videos.list({
 				id: data.id.videoId,
 				part:"statistics"
@@ -305,12 +313,12 @@ function $videoUI(id)
 						rate.className = "class-video-rate-view-count";
 						rate.innerHTML = response.items[0].statistics.viewCount; 
 						rating.appendChild(rate);
-						
+
 						rate = document.createElement("div");
 						rate.className = "class-video-rate-like-count";
 						rate.innerHTML = response.items[0].statistics.likeCount; 
 						rating.appendChild(rate);
-						
+
 						rate = document.createElement("div");
 						rate.className = "class-video-rate-dislike-count";
 						rate.innerHTML = response.items[0].statistics.dislikeCount; 
@@ -320,45 +328,57 @@ function $videoUI(id)
 
 			});
 		}
-		
+
 		//	Private Methods
 		function getComments()
 		{
+
 			var request = new $request();
 			request.responseReady = function(text){
 				var tmp = JSON.parse(text);
-				if(tmp.feed != undefined)
+				if(tmp.items != undefined)
 				{	
-					
-					if(tmp.feed.entry != undefined)
-					{	
-						comments_list = tmp.feed.entry;
-						comments.setTitle("Comments("+ comments_list.length + ")");
-						if(comments_list.length > comments_page) comments.pagination(true);
-						nextComments();
+					comments_list = tmp.items;
+					commnets_next_token = tmp.nextPageToken;
+					if(commnets_next_token !="")
+					{
+						comments.pagination(true);
 					}
+					else
+					{
+						comments.pagination(false);
+					}	
+					displayComments();
 				}
-				
+
 			};
-			request.execute("http://gdata.youtube.com/feeds/api/videos/" + data.id.videoId + "/comments?v=2&alt=json&max-results=50","GET");
+			//request.execute("http://gdata.youtube.com/feeds/api/videos/" + data.id.videoId + "/comments?v=2&alt=json&max-results=50","GET");
+
+			/* New code added to get comments the code above doesn't work anymore, API 2 has been deprecated, I didn't know that until today */
+			/* This code will only retrieve the comments and not the replies so the new code will match the old one
+			 */
+			request.execute("https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=" +data.id.videoId + 
+					"&key=" + YOUTUBE_API_KEY + "&pageToken=" + commnets_next_token +"&order=time" ,"GET");
+
+
+			/* left this code because had problems implementing it, I got message saying :insufficient privileges, not sure why
+			 * 
+			var request = gapi.client.youtube.commentThreads.list(
+					{videoId: data.id.videoId,	part:'snippet'});
+			request.execute(function(response){
+			});
+			 */
+
 		}
 
-		function nextComments()
+		function displayComments()
 		{
-			if(comment_index > comments_list.length) return;
 
-			var cnt = 1;
-			var  i = 0; 
-			for(i = comment_index ; i < comments_list.length ; i++)
+			for(var i = 0 ; i < comments_list.length ; i++)
 			{
 				var cmt = new $comment(comments_list[i]);
 				comments.addItem(cmt);
-				if(cnt == comments_page) break;
-				cnt++;
 			}
-			comment_index = i + 1;
-
-			if(comment_index > comments_list.length) comments.pagination(false);
 		}
 
 		function $comment(d)
@@ -371,6 +391,7 @@ function $videoUI(id)
 
 			var pic = document.createElement("div");
 			pic.className = "class-comment-pic";
+			pic.style.backgroundImage = "url(" + d.snippet.topLevelComment.snippet.authorProfileImageUrl + ")";
 
 			var right = document.createElement("div");
 			right.className = "class-cell";
@@ -379,34 +400,32 @@ function $videoUI(id)
 
 			var author = document.createElement("div");
 			author.className = "inline-element class-comment-author class-link";
-			if(d.author.length > 0) 
-			{
-				author.innerHTML = d.author[0].name.$t;
-				author.userid = d.author[0].name.$t;
-				author.onclick = function(){
-					window.open(YOUTUBE_USER_URL + this.userid);
-				};
 
-				pic.userid = d.author[0].name.$t;
-				pic.onclick = function(){
-					window.open(YOUTUBE_USER_URL + this.userid);
-				};
-			}
+			author.innerHTML = d.snippet.topLevelComment.snippet.authorDisplayName;
+			author.userid = d.snippet.topLevelComment.snippet.authorGoogleplusProfileUrl;
+			author.onclick = function(){
+				window.open(this.userid);
+			};
+
+			pic.userid = d.snippet.topLevelComment.snippet.authorGoogleplusProfileUrl;
+			pic.onclick = function(){
+				window.open(this.userid);
+			};
 
 			var date = document.createElement("div");
 			date.className = "inline-element class-comment-date";
-			date.innerHTML = new Date(d.published.$t);
+			date.innerHTML = new Date(d.snippet.topLevelComment.snippet.publishedAt);
 
 			var content = document.createElement("div");
 			content.className = "class-comment-content";
-			content.innerHTML = d.content.$t;
+			content.innerHTML = d.snippet.topLevelComment.snippet.textDisplay;
 
 			var replies = document.createElement("div");
 			replies.className = "class-comment-replies";
 
 			var reply_cnt = document.createElement("div");
 			reply_cnt.className = "class-link"; 
-			reply_cnt.innerHTML = "Replies: " + d.yt$replyCount.$t; 
+			reply_cnt.innerHTML = "Replies: " + d.snippet.totalReplyCount; 
 
 			replies.appendChild(reply_cnt);
 
@@ -460,7 +479,7 @@ function $videoUI(id)
 			if(search.index > -1) 
 			{
 				search.list.splice(search.index, 1);
-				loaclStorage.setItem("favoritelist", JSON.stringify(search.list));
+				localStorage.setItem("favoritelist", JSON.stringify(search.list));
 			}	
 		}
 
@@ -496,12 +515,11 @@ function $videoUI(id)
 	{
 
 		var This = this;
-		this.Element = document.createElement("div");
-		this.Element.className = "class-video-list-item";
+		$object.call(this, "div","class-video-list-item");
 
 		this._parent = null;
 
-		this.Element.onclick = function(){
+		this.clicked = function(){
 			if(This._parent!=null) 
 			{
 				This._parent.itemselected(data);
@@ -517,7 +535,7 @@ function $videoUI(id)
 		video.style["background-image"] = "url(" + data.snippet.thumbnails["default"].url +")";
 
 		cell.appendChild(video);
-		this.Element.appendChild(cell);
+		this.appendChild(cell);
 
 		var details =  document.createElement("div");
 		details.className = "class-video-list-details";
@@ -554,7 +572,7 @@ function $videoUI(id)
 			details.appendChild(del);
 		}	
 
-		this.Element.appendChild(cell);
+		this.appendChild(cell);
 	}
 }
 
@@ -562,14 +580,13 @@ function $videoUI(id)
 function $dropdown(list, label)
 {
 	var This = this;
-	$object.call(this);
+	$object.call(this,"select", "class-dropdown");
 
 	DROPDOWN_ID++;
 	var id = "_ddlb" + DROPDOWN_ID;
 
-	this.Element = document.createElement("select");
-	this.Element.className = "class-dropdown";
 	this.Element.id = id; 
+
 	this.Element.onchange = function(e){
 		This.selectionchanged(this.value);
 	};
@@ -595,9 +612,7 @@ function $dropdown(list, label)
 function $foldinglist(text, clear)
 {
 	var This = this;
-	$object.call(this);
-	this.Element = document.createElement("div");
-	this.Element.className = "class-object class-folding-list";
+	$object.call(this,"div", "class-object class-folding-list");
 
 	var remove = null;
 
@@ -644,8 +659,8 @@ function $foldinglist(text, clear)
 		header.appendChild(remove.Element);
 	}	
 
-	this.Element.appendChild(header);
-	this.Element.appendChild(node);
+	this.appendChild(header);
+	this.appendChild(node);
 
 	//	Events
 	this.itemselected = function(value){};
@@ -707,9 +722,7 @@ function $foldinglist(text, clear)
 function $listpagination(title)
 {
 	var This = this;
-	$object.call(this);
-	this.Element = document.createElement("div");
-	this.Element.className = "class-object class-list-pagination";
+	$object.call(this,"div","class-object class-list-pagination");
 
 	var title_text = document.createElement("div");
 	title_text.className = "class-list-pagination-title";
@@ -727,9 +740,9 @@ function $listpagination(title)
 		This.showmore();
 	};
 
-	this.Element.appendChild(title_text);
-	this.Element.appendChild(list);
-	this.Element.appendChild(show_more);
+	this.appendChild(title_text);
+	this.appendChild(list);
+	this.appendChild(show_more);
 
 	//	Events
 	this._itemselected = function(){};
@@ -761,51 +774,111 @@ function $listpagination(title)
 	};
 }
 
+function $objecttable()
+{
+	$object.call(this, "div","class-table");
+
+	this.appendRow = function(c){
+		var row = document.createElement("div");
+		row.className = "class-row";
+
+		for(var i=0;i < c ;i++)
+		{	
+			var cell = document.createElement("div");
+			cell.className = "class-cell";
+			row.appendChild(cell);
+		}
+
+		this.appendChild(row);
+
+	};
+
+	this.addItem = function(r,c, o)
+	{
+		if(this.Element.childNodes[r].childNodes[c] != undefined)
+		{
+			if(o.Element == undefined)
+			{
+				this.Element.childNodes[r].childNodes[c].appendChild(o);
+			}
+			else
+			{	
+				this.Element.childNodes[r].childNodes[c].appendChild(o.Element);
+			}
+		}	
+	};
+
+}
+
 function $inputtext()
 {
 	var This = this;
-	$object.call(this);
-	this.Element = document.createElement("input");
-	this.Element.type = "text";
-	this.Element.className = "class-input-text";
+	$input.call(this,"text","class-input-text");
 
-	this.Element.onkeypress = function(e){
+	this.Element.addEventListener("keypress", function(e){
 		var k = e.keyCode?e.keyCode:e.which;
 		if(k==13) This.enterkeypressed();
-	};
-	
+	});
+
 	//	Events
 	this.enterkeypressed = function(){};
-	
-	// Methods
-	this.getText = function(){ return this.Element.value;};
+
 }
 
 function $inputbutton(text)
 {	
-	$object.call(this);
-	var This = this;
-	this.Element = document.createElement("input");
-	this.Element.type = "button";
-	this.Element.className = "class-input-button";
-	this.Element.value = text;
-	this.Element.onclick = function(e){ _stopEvent(e); This.clicked();};
-
-	//	Events
-	this.clicked = function(){};
+	$input.call(this,"button", "class-input-button");
+	this.setText(text);
 }
 
-function $object()
+function $input(t,c)
+{
+	$object.call(this, "input", c);
+	this.Element.type = t;
+
+	// Methods
+	this.getText = function(){ return this.Element.value;};
+	this.setText = function(v){ return this.Element.value = v;};
+}
+
+function $objectpanel(c)
+{
+	$object.call(this,"div",c);
+}
+
+function $object(t,c)
 {
 	var This = this;
-	this.Element = document.createElement("div");
+
+	//	Create Element based on parameters
+	this.Element = t==undefined ?document.createElement("div"):document.createElement(t);
+	if(c!=undefined) this.Element.className = c;
+
+	this.Element.onclick = function(e){ _stopEvent(e); This.clicked();};
 
 	this.style = "";
 	this.enabled = true;
 	_listenProperty(this,"style,enabled",_set);
 
+	//	Events
+	this.clicked = function(){};
+
+	//	Methods
 	this.focus = function(){
 		this.Element.focus();
+	};
+
+
+	this.appendChild = function(o)
+	{
+		if(o.Element == undefined)
+		{
+			this.Element.appendChild(o);
+		}
+		else
+		{	
+			this.Element.appendChild(o.Element);
+		}
 	};
 
 	function _set(p,v)
@@ -854,7 +927,7 @@ function $request()
 			}	
 			else if(type == "POST")
 			{
-				reqxml.open("POST", url, asyn);
+				reqxml.open("POST", url, true);
 				reqxml.setRequestHeader("Content-Type",This.contenttype);
 				reqxml.send(args);
 			}	
